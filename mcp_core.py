@@ -9,6 +9,7 @@ def get_kubeconfig_path():
     return os.getenv('KUBECONFIG', 'k3s.yaml')
 
 def list_kubernetes_nodes() -> str:
+    """Liste tous les nœuds du cluster Kubernetes et leur statut."""
     try:
         kubeconfig_file = get_kubeconfig_path()
         if not os.path.exists(kubeconfig_file):
@@ -32,6 +33,40 @@ def list_kubernetes_nodes() -> str:
     except Exception as e:
         return f"Une erreur inattendue est survenue lors de l'accès à Kubernetes: {e}"
 
+def list_kubernetes_pods(namespace: str = None) -> str:
+    """
+    Liste les pods dans un namespace Kubernetes.
+    Si aucun namespace n'est spécifié, liste les pods de tous les namespaces.
+    """
+    try:
+        kubeconfig_file = get_kubeconfig_path()
+        if not os.path.exists(kubeconfig_file):
+            return f"Erreur: Fichier de configuration '{kubeconfig_file}' introuvable."
+
+        config.load_kube_config(config_file=kubeconfig_file)
+        v1 = client.CoreV1Api()
+
+        output = "Pods:\n"
+        if namespace:
+            pod_list = v1.list_namespaced_pod(namespace, timeout_seconds=10)
+        else:
+            pod_list = v1.list_pod_for_all_namespaces(timeout_seconds=10)
+
+        for pod in pod_list.items:
+            output += f"- Namespace: {pod.metadata.namespace}, Nom: {pod.metadata.name}, Statut: {pod.status.phase}\n"
+
+        if not pod_list.items:
+            return "Aucun pod trouvé."
+
+        return output
+
+    except ApiException as e:
+        if e.status == 404:
+            return f"Erreur: Le namespace '{namespace}' n'existe pas."
+        return f"Erreur API Kubernetes ({e.status}): {e.reason}"
+    except Exception as e:
+        return f"Une erreur inattendue est survenue: {e}"
+
 def extract_text_from_response(response):
     text_parts = []
     for part in response.candidates[0].content.parts:
@@ -48,7 +83,7 @@ def main():
         print(f"Erreur: Impossible d'initialiser le client Google GenAI: {e}")
         return
 
-    tools = [list_kubernetes_nodes]
+    tools = [list_kubernetes_nodes, list_kubernetes_pods]
     model_name = 'gemini-2.5-flash'
     tool_config = types.GenerateContentConfig(tools=tools)
 
@@ -72,7 +107,7 @@ def main():
 
         if user_input.lower() == 'help':
             print("Commandes: 'exit', 'help'.")
-            print("Exemple de question: 'quel est le statut des nœuds ?'")
+            print("Exemples: 'quel est le statut des nœuds ?', 'liste les pods dans kube-system'")
             continue
 
         try:
