@@ -1,14 +1,22 @@
+import os
 from dotenv import load_dotenv
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 import google.genai as genai
 from google.genai import types
 
+def get_kubeconfig_path():
+    return os.getenv('KUBECONFIG', 'k3s.yaml')
+
 def list_kubernetes_nodes() -> str:
     try:
-        config.load_kube_config(config_file="k3s.yaml")
+        kubeconfig_file = get_kubeconfig_path()
+        if not os.path.exists(kubeconfig_file):
+            return f"Erreur: Fichier de configuration '{kubeconfig_file}' introuvable."
+
+        config.load_kube_config(config_file=kubeconfig_file)
         v1 = client.CoreV1Api()
-        node_list = v1.list_node()
+        node_list = v1.list_node(timeout_seconds=10)
 
         output = "Statut des Nœuds:\n"
         for node in node_list.items:
@@ -19,15 +27,12 @@ def list_kubernetes_nodes() -> str:
             output += f"- {node.metadata.name}: {status}\n"
         return output
 
-    except FileNotFoundError:
-        return "Erreur: k3s.yaml introuvable. Impossible de se connecter au cluster."
     except ApiException as e:
-        return f"Erreur: L'appel à l'API Kubernetes a échoué avec le statut {e.status}: {e.reason}"
+        return f"Erreur API Kubernetes ({e.status}): {e.reason}"
     except Exception as e:
-        return f"Une erreur inattendue est survenue: {e}"
+        return f"Une erreur inattendue est survenue lors de l'accès à Kubernetes: {e}"
 
 def extract_text_from_response(response):
-    """Extrait seulement le texte de la réponse sans générer de warnings."""
     text_parts = []
     for part in response.candidates[0].content.parts:
         if hasattr(part, 'text') and part.text:
@@ -45,28 +50,29 @@ def main():
 
     tools = [list_kubernetes_nodes]
     model_name = 'gemini-2.5-flash'
-
     tool_config = types.GenerateContentConfig(tools=tools)
 
-    print("MCP Core Initialisé. Tapez 'exit' pour quitter.")
+    print("MCP Core Initialisé. Tapez 'help' ou 'exit'.")
 
     chat_history = []
 
     while True:
         try:
-            user_input = input("MCP> ")
-        except KeyboardInterrupt:
+            user_input = input("MCP> ").strip()
+        except (KeyboardInterrupt, EOFError):
             print("\nArrêt.")
             break
-        except EOFError:
-            print("\nFin de la session.")
-            break
+
+        if not user_input:
+            continue
 
         if user_input.lower() == 'exit':
             print("Arrêt.")
             break
 
-        if not user_input:
+        if user_input.lower() == 'help':
+            print("Commandes: 'exit', 'help'.")
+            print("Exemple de question: 'quel est le statut des nœuds ?'")
             continue
 
         try:
@@ -78,7 +84,6 @@ def main():
                 config=tool_config,
             )
 
-            # Utiliser notre fonction personnalisée au lieu de response.text
             response_text = extract_text_from_response(response)
             print(response_text)
 
