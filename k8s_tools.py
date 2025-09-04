@@ -1,12 +1,54 @@
 import os
+from typing import Optional
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
 def get_kubeconfig_path():
     return os.getenv('KUBECONFIG', 'k3s.yaml')
 
-def list_kubernetes_nodes() -> str:
-    """Liste tous les nœuds du cluster Kubernetes et leur statut."""
+def _get_nodes(v1, **kwargs):
+    items = v1.list_node().items
+    output = "Nœuds:\n"
+    for item in items:
+        status = next((c.status for c in item.status.conditions if c.type == 'Ready'), 'Inconnu')
+        output += f"- {item.metadata.name} (Statut: {'Prêt' if status == 'True' else 'Non Prêt'})\n"
+    return output
+
+def _get_pods(v1, namespace=None, **kwargs):
+    items = v1.list_pod_for_all_namespaces().items if not namespace else v1.list_namespaced_pod(namespace).items
+    output = "Pods:\n"
+    for item in items:
+        output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Statut: {item.status.phase}\n"
+    return output if items else "Aucun pod trouvé."
+
+def _get_deployments(apps_v1, namespace=None, **kwargs):
+    items = apps_v1.list_deployment_for_all_namespaces().items if not namespace else apps_v1.list_namespaced_deployment(namespace).items
+    output = "Déploiements:\n"
+    for item in items:
+        output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Replicas: {item.status.replicas}\n"
+    return output if items else "Aucun déploiement trouvé."
+
+def _get_services(v1, namespace=None, **kwargs):
+    items = v1.list_service_for_all_namespaces().items if not namespace else v1.list_namespaced_service(namespace).items
+    output = "Services:\n"
+    for item in items:
+        output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Type: {item.spec.type}, IP: {item.spec.cluster_ip}\n"
+    return output if items else "Aucun service trouvé."
+
+DISPATCHER = {
+    ('get', 'nodes'): _get_nodes,
+    ('get', 'pods'): _get_pods,
+    ('get', 'deployments'): _get_deployments,
+    ('get', 'services'): _get_services,
+}
+
+def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None) -> str:
+    """
+    Outil universel pour interagir avec l'API Kubernetes via la librairie Python.
+    Traduit des commandes simples en appels API natifs.
+    Verbes supportés: 'get'.
+    Ressources supportées: 'nodes', 'pods', 'deployments', 'services'.
+    """
     try:
         kubeconfig_file = get_kubeconfig_path()
         if not os.path.exists(kubeconfig_file):
@@ -14,83 +56,18 @@ def list_kubernetes_nodes() -> str:
 
         config.load_kube_config(config_file=kubeconfig_file)
         v1 = client.CoreV1Api()
-        node_list = v1.list_node(timeout_seconds=10)
+        apps_v1 = client.AppsV1Api()
 
-        output = "Statut des Nœuds:\n"
-        for node in node_list.items:
-            status = "Inconnu"
-            for condition in node.status.conditions:
-                if condition.type == "Ready":
-                    status = "Prêt" if condition.status == "True" else "Non Prêt"
-            output += f"- {node.metadata.name}: {status}\n"
-        return output
+        handler = DISPATCHER.get((verb, resource))
 
-    except ApiException as e:
-        return f"Erreur API Kubernetes ({e.status}): {e.reason}"
-    except Exception as e:
-        return f"Une erreur inattendue est survenue lors de l'accès à Kubernetes: {e}"
-
-def list_kubernetes_pods(namespace: str = None) -> str:
-    """
-    Liste les pods dans un namespace Kubernetes.
-    Si aucun namespace n'est spécifié, liste les pods de tous les namespaces.
-    """
-    try:
-        kubeconfig_file = get_kubeconfig_path()
-        if not os.path.exists(kubeconfig_file):
-            return f"Erreur: Fichier de configuration '{kubeconfig_file}' introuvable."
-
-        config.load_kube_config(config_file=kubeconfig_file)
-        v1 = client.CoreV1Api()
-
-        output = "Pods:\n"
-        if namespace:
-            pod_list = v1.list_namespaced_pod(namespace, timeout_seconds=10)
+        if handler:
+            return handler(v1=v1, apps_v1=apps_v1, name=name, namespace=namespace)
         else:
-            pod_list = v1.list_pod_for_all_namespaces(timeout_seconds=10)
-
-        for pod in pod_list.items:
-            output += f"- Namespace: {pod.metadata.namespace}, Nom: {pod.metadata.name}, Statut: {pod.status.phase}\n"
-
-        if not pod_list.items:
-            return f"Aucun pod trouvé dans le namespace '{namespace}'." if namespace else "Aucun pod trouvé."
-
-        return output
+            return f"Erreur: La combinaison de l'action '{verb}' et de la ressource '{resource}' n'est pas supportée."
 
     except ApiException as e:
         if e.status == 404:
-            return f"Erreur: Le namespace '{namespace}' n'existe pas."
-        return f"Erreur API Kubernetes ({e.status}): {e.reason}"
-    except Exception as e:
-        return f"Une erreur inattendue est survenue: {e}"
-
-def describe_kubernetes_pod(name: str, namespace: str) -> str:
-    """
-    Donne des informations détaillées sur un pod spécifique dans un namespace donné,
-    y compris son statut, son IP, et le nœud sur lequel il s'exécute.
-    """
-    try:
-        kubeconfig_file = get_kubeconfig_path()
-        if not os.path.exists(kubeconfig_file):
-            return f"Erreur: Fichier de configuration '{kubeconfig_file}' introuvable."
-
-        config.load_kube_config(config_file=kubeconfig_file)
-        v1 = client.CoreV1Api()
-        pod = v1.read_namespaced_pod(name=name, namespace=namespace, _request_timeout=10)
-
-        output = f"Détails du Pod '{name}' dans le namespace '{namespace}':\n"
-        output += f"  - Nœud: {pod.spec.node_name}\n"
-        output += f"  - IP du Pod: {pod.status.pod_ip}\n"
-        output += f"  - Statut: {pod.status.phase}\n"
-        output += "  - Conteneurs:\n"
-        for container in pod.spec.containers:
-            output += f"    - {container.name} (Image: {container.image})\n"
-
-        return output
-
-    except ApiException as e:
-        if e.status == 404:
-            return f"Erreur: Le pod '{name}' n'a pas été trouvé dans le namespace '{namespace}'."
+            return f"Erreur: La ressource '{name}' n'a pas été trouvée dans le namespace '{namespace}'."
         return f"Erreur API Kubernetes ({e.status}): {e.reason}"
     except Exception as e:
         return f"Une erreur inattendue est survenue: {e}"

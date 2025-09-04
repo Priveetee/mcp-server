@@ -18,9 +18,7 @@ class Agent:
 
         self.model_name = model_name
         self.available_tools = [
-            k8s_tools.list_kubernetes_nodes,
-            k8s_tools.list_kubernetes_pods,
-            k8s_tools.describe_kubernetes_pod
+            k8s_tools.kubernetes_tool
         ]
         self.tool_config = types.GenerateContentConfig(tools=self.available_tools)
         self.chat_history = []
