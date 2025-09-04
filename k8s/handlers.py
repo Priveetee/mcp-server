@@ -1,4 +1,9 @@
-from kubernetes import client
+import os
+from typing import Optional
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+import datetime
+import pytz
 
 # --- Handlers pour le verbe 'GET' ---
 
@@ -74,8 +79,6 @@ def describe_deployment(apps_v1, name, namespace, **kwargs):
     return output
 
 # --- Handlers pour les verbes d'ACTION ---
-import datetime
-import pytz
 
 def restart_deployment(apps_v1, name, namespace, **kwargs):
     patch = {
@@ -93,22 +96,36 @@ def restart_deployment(apps_v1, name, namespace, **kwargs):
     return f"Le redémarrage du déploiement '{name}' dans le namespace '{namespace}' a été initié."
 
 def scale_deployment(apps_v1, name, namespace, replicas, **kwargs):
-    """Met à l'échelle un déploiement à un nombre spécifique de réplicas."""
     try:
         replica_count = int(replicas)
     except (ValueError, TypeError):
         return f"Erreur: Le nombre de réplicas '{replicas}' n'est pas un entier valide."
 
-    scale_body = client.V1Scale(
-        spec=client.V1ScaleSpec(replicas=replica_count)
-    )
-
-    apps_v1.patch_namespaced_deployment_scale(
-        name=name,
-        namespace=namespace,
-        body=scale_body
-    )
+    scale_body = client.V1Scale(spec=client.V1ScaleSpec(replicas=replica_count))
+    apps_v1.patch_namespaced_deployment_scale(name=name, namespace=namespace, body=scale_body)
     return f"Le déploiement '{name}' dans le namespace '{namespace}' a été mis à l'échelle à {replica_count} réplicas."
+
+def undo_deployment_rollout(apps_v1, name, namespace, **kwargs):
+    """Annule le dernier déploiement (rollout) pour revenir à la version précédente."""
+    all_replicasets = apps_v1.list_namespaced_replica_set(namespace=namespace, label_selector=f"app={name}")
+
+    revisions = {}
+    for rs in all_replicasets.items:
+        revision = rs.metadata.annotations.get('deployment.kubernetes.io/revision')
+        if revision:
+            revisions[int(revision)] = rs
+
+    if len(revisions) < 2:
+        return f"Erreur: Pas d'historique de révision trouvé pour le déploiement '{name}'."
+
+    sorted_revisions = sorted(revisions.keys(), reverse=True)
+    previous_revision_number = sorted_revisions[1]
+    previous_replicaset = revisions[previous_revision_number]
+
+    patch_body = {"spec": {"template": previous_replicaset.spec.template}}
+
+    apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=patch_body)
+    return f"Le rollback du déploiement '{name}' vers la révision {previous_revision_number} a été initié."
 
 # --- Handlers pour le verbe 'LOGS' ---
 
@@ -118,13 +135,7 @@ def get_pod_logs(v1, name, namespace, **kwargs):
         return f"Erreur: Le pod '{name}' n'a pas de conteneurs."
 
     container_name = pod.spec.containers[0].name
-
-    logs = v1.read_namespaced_pod_log(
-        name=name,
-        namespace=namespace,
-        container=container_name,
-        tail_lines=50
-    )
+    logs = v1.read_namespaced_pod_log(name=name, namespace=namespace, container=container_name, tail_lines=50)
 
     output = f"Logs pour le pod '{name}' (conteneur: {container_name}):\n"
     output += "--------------------------------------------------\n"
