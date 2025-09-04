@@ -1,6 +1,7 @@
 import datetime
 import pytz
 from kubernetes import client
+from kubernetes.client import ApiClient
 
 def get_deployments(apps_v1, namespace=None, **kwargs):
     items = apps_v1.list_deployment_for_all_namespaces().items if not namespace else apps_v1.list_namespaced_deployment(namespace).items
@@ -27,42 +28,44 @@ def restart_deployment(apps_v1, name, namespace, **kwargs):
     return f"Le redémarrage du déploiement '{name}' a été initié."
 
 def scale_deployment(apps_v1, name, namespace, replicas, **kwargs):
-    """Met à l'échelle un déploiement à un nombre spécifique de réplicas."""
-    try:
-        replica_count = int(replicas)
-    except (ValueError, TypeError):
-        return f"Erreur: Le nombre de réplicas '{replicas}' n'est pas un entier valide."
-
+    replica_count = int(replicas)
     scale_body = client.V1Scale(
         metadata=client.V1ObjectMeta(name=name, namespace=namespace),
         spec=client.V1ScaleSpec(replicas=replica_count)
     )
-
-    apps_v1.patch_namespaced_deployment_scale(
-        name=name,
-        namespace=namespace,
-        body=scale_body
-    )
+    apps_v1.patch_namespaced_deployment_scale(name=name, namespace=namespace, body=scale_body)
     return f"Le déploiement '{name}' a été mis à l'échelle à {replica_count} réplicas."
+
 
 def undo_deployment_rollout(apps_v1, name, namespace, **kwargs):
     """Annule le dernier déploiement (rollout) pour revenir à la version précédente."""
-    all_replicasets = apps_v1.list_namespaced_replica_set(namespace=namespace, label_selector=f"app={name}")
+    all_replicasets = apps_v1.list_namespaced_replica_set(namespace=namespace).items
+
+    owned_replicasets = []
+    deployment_uid = apps_v1.read_namespaced_deployment(name=name, namespace=namespace).metadata.uid
+    for rs in all_replicasets:
+        if rs.metadata.owner_references:
+            for owner in rs.metadata.owner_references:
+                if owner.uid == deployment_uid:
+                    owned_replicasets.append(rs)
+                    break
 
     revisions = {}
-    for rs in all_replicasets.items:
+    for rs in owned_replicasets:
         revision = rs.metadata.annotations.get('deployment.kubernetes.io/revision')
         if revision:
             revisions[int(revision)] = rs
 
     if len(revisions) < 2:
-        return f"Erreur: Pas d'historique de révision trouvé pour le déploiement '{name}'."
+        return f"Erreur: Pas d'historique de révision suffisant pour annuler le déploiement '{name}'. Une action 'undo' n'est possible qu'après un changement d'image, pas après un 'scale'."
 
     sorted_revisions = sorted(revisions.keys(), reverse=True)
     previous_revision_number = sorted_revisions[1]
     previous_replicaset = revisions[previous_revision_number]
 
-    patch_body = {"spec": {"template": previous_replicaset.spec.template}}
+    api_client = client.ApiClient()
+    template_dict = api_client.sanitize_for_serialization(previous_replicaset.spec.template)
+    patch_body = {"spec": {"template": template_dict}}
 
     apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=patch_body)
     return f"Le rollback du déploiement '{name}' vers la révision {previous_revision_number} a été initié."

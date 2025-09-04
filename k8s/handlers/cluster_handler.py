@@ -6,6 +6,16 @@ def get_nodes(v1, **kwargs):
         output += f"- {item.metadata.name} (Statut: {'Prêt' if status == 'True' else 'Non Prêt'})\n"
     return output
 
+
+def get_namespaces(v1, **kwargs):
+    """Liste tous les namespaces disponibles dans le cluster. Ne prend aucun argument."""
+    items = v1.list_namespace().items
+    output = "Namespaces:\n"
+    for item in items:
+        output += f"- {item.metadata.name} (Statut: {item.status.phase})\n"
+    return output
+
+
 def check_cluster_health(v1, apps_v1, **kwargs):
     """Effectue un bilan de santé du cluster en recherchant les problèmes courants."""
     problems = []

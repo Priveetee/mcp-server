@@ -5,6 +5,7 @@ from .handlers import cluster_handler, deployment_handler, pod_handler
 
 DISPATCHER = {
     ('get', 'nodes'): cluster_handler.get_nodes,
+    ('get', 'namespaces'): cluster_handler.get_namespaces,
     ('check', 'health'): cluster_handler.check_cluster_health,
     ('get', 'pods'): pod_handler.get_pods,
     ('describe', 'pods'): pod_handler.describe_pod,
@@ -19,8 +20,10 @@ DISPATCHER = {
 def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None, replicas: Optional[int] = None) -> str:
     """
     Outil universel pour interagir avec l'API Kubernetes.
-    Verbes: 'get', 'describe', 'restart', 'logs', 'scale', 'undo', 'check'.
-    Ressources: 'nodes', 'pods', 'deployments', 'health'.
+    Verbes supportés: 'get', 'describe', 'restart', 'logs', 'scale', 'undo', 'check'.
+    Ressources supportées: 'nodes', 'pods', 'deployments', 'health', 'namespaces'.
+    'restart', 'scale', et 'undo' sont pour 'deployments'. 'logs' et 'describe' sont pour 'pods'.
+    'check health' effectue un bilan de santé global.
     """
     if k8s_clients.error:
         return f"Erreur de configuration Kubernetes: {k8s_clients.error}"
