@@ -13,13 +13,16 @@ DISPATCHER = {
     ('get', 'deployments'): handlers.get_deployments,
     ('get', 'services'): handlers.get_services,
     ('describe', 'pods'): handlers.describe_pod,
+    ('describe', 'deployments'): handlers.describe_deployment,
+    ('restart', 'deployments'): handlers.restart_deployment,
 }
 
 def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None) -> str:
     """
     Outil universel pour interagir avec l'API Kubernetes.
-    Verbes supportés: 'get', 'describe'.
+    Verbes supportés: 'get', 'describe', 'restart'.
     Ressources supportées: 'nodes', 'pods', 'deployments', 'services'.
+    'restart' n'est supporté que pour la ressource 'deployments'.
     """
     try:
         kubeconfig_file = get_kubeconfig_path()
@@ -33,6 +36,9 @@ def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namesp
         handler = DISPATCHER.get((verb, resource))
 
         if handler:
+            # Vérification des arguments obligatoires pour les actions
+            if verb in ['describe', 'restart'] and (not name or not namespace):
+                return f"Erreur: Pour l'action '{verb}' sur '{resource}', le nom et le namespace sont obligatoires."
             return handler(v1=v1, apps_v1=apps_v1, name=name, namespace=namespace)
         else:
             return f"Erreur: La combinaison de l'action '{verb}' et de la ressource '{resource}' n'est pas supportée."

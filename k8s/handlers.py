@@ -1,3 +1,5 @@
+import datetime
+import pytz
 from kubernetes import client
 
 # --- Handlers pour le verbe 'GET' ---
@@ -43,3 +45,42 @@ def describe_pod(v1, name, namespace, **kwargs):
     for container in pod.spec.containers:
         output += f"    - {container.name} (Image: {container.image})\n"
     return output
+
+def describe_deployment(apps_v1, name, namespace, **kwargs):
+    """Récupère les détails d'un déploiement spécifique."""
+    deployment = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+    spec = deployment.spec
+    status = deployment.status
+
+    output = f"Détails du Déploiement '{name}' (NS: {namespace}):\n"
+    output += f"  - Replicas: {status.replicas or 0} désirés | {status.updated_replicas or 0} à jour | {status.ready_replicas or 0} prêts | {status.available_replicas or 0} disponibles\n"
+    output += f"  - Stratégie: {spec.strategy.type}\n"
+
+    # On cherche l'annotation de redémarrage
+    annotations = spec.template.metadata.annotations
+    restarted_at = annotations.get('kubectl.kubernetes.io/restartedAt') if annotations else None
+    if restarted_at:
+        output += f"  - Redémarré le: {restarted_at}\n"
+
+    output += "  - Conteneurs:\n"
+    for container in spec.template.spec.containers:
+        output += f"    - {container.name} (Image: {container.image})\n"
+
+    return output
+
+
+def restart_deployment(apps_v1, name, namespace, **kwargs):
+    """Redémarre un déploiement en mettant à jour ses annotations."""
+    patch = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "kubectl.kubernetes.io/restartedAt": datetime.datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat()
+                    }
+                }
+            }
+        }
+    }
+    apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=patch)
+    return f"Le redémarrage du déploiement '{name}' dans le namespace '{namespace}' a été initié."
