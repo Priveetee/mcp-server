@@ -92,6 +92,24 @@ def restart_deployment(apps_v1, name, namespace, **kwargs):
     apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=patch)
     return f"Le redémarrage du déploiement '{name}' dans le namespace '{namespace}' a été initié."
 
+def scale_deployment(apps_v1, name, namespace, replicas, **kwargs):
+    """Met à l'échelle un déploiement à un nombre spécifique de réplicas."""
+    try:
+        replica_count = int(replicas)
+    except (ValueError, TypeError):
+        return f"Erreur: Le nombre de réplicas '{replicas}' n'est pas un entier valide."
+
+    scale_body = client.V1Scale(
+        spec=client.V1ScaleSpec(replicas=replica_count)
+    )
+
+    apps_v1.patch_namespaced_deployment_scale(
+        name=name,
+        namespace=namespace,
+        body=scale_body
+    )
+    return f"Le déploiement '{name}' dans le namespace '{namespace}' a été mis à l'échelle à {replica_count} réplicas."
+
 # --- Handlers pour le verbe 'LOGS' ---
 
 def get_pod_logs(v1, name, namespace, **kwargs):

@@ -16,14 +16,16 @@ DISPATCHER = {
     ('describe', 'deployments'): handlers.describe_deployment,
     ('restart', 'deployments'): handlers.restart_deployment,
     ('logs', 'pods'): handlers.get_pod_logs,
+    ('scale', 'deployments'): handlers.scale_deployment,
 }
 
-def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None) -> str:
+def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None, replicas: Optional[int] = None) -> str:
     """
     Outil universel pour interagir avec l'API Kubernetes.
-    Verbes supportés: 'get', 'describe', 'restart'.
+    Verbes supportés: 'get', 'describe', 'restart', 'logs', 'scale'.
     Ressources supportées: 'nodes', 'pods', 'deployments', 'services'.
-    'restart' n'est supporté que pour la ressource 'deployments'.
+    'restart' et 'scale' sont pour 'deployments'. 'logs' et 'describe' sont pour 'pods' et 'deployments'.
+    Pour 'scale', l'argument 'replicas' est obligatoire.
     """
     try:
         kubeconfig_file = get_kubeconfig_path()
@@ -37,10 +39,12 @@ def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namesp
         handler = DISPATCHER.get((verb, resource))
 
         if handler:
-            # Vérification des arguments obligatoires pour les actions
-            if verb in ['describe', 'restart'] and (not name or not namespace):
-                return f"Erreur: Pour l'action '{verb}' sur '{resource}', le nom et le namespace sont obligatoires."
-            return handler(v1=v1, apps_v1=apps_v1, name=name, namespace=namespace)
+            if verb in ['describe', 'restart', 'logs'] and (not name or not namespace):
+                return f"Erreur: Pour l'action '{verb}', le nom et le namespace sont obligatoires."
+            if verb == 'scale' and (not name or not namespace or replicas is None):
+                return f"Erreur: Pour l'action 'scale', le nom, le namespace et le nombre de réplicas sont obligatoires."
+
+            return handler(v1=v1, apps_v1=apps_v1, name=name, namespace=namespace, replicas=replicas)
         else:
             return f"Erreur: La combinaison de l'action '{verb}' et de la ressource '{resource}' n'est pas supportée."
 
