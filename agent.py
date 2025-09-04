@@ -1,6 +1,6 @@
 import google.genai as genai
 from google.genai import types
-import k8s_tools
+from k8s import client as k8s_client
 
 def extract_text_from_response(response):
     text_parts = []
@@ -18,7 +18,7 @@ class Agent:
 
         self.model_name = model_name
         self.available_tools = [
-            k8s_tools.kubernetes_tool
+            k8s_client.kubernetes_tool
         ]
         self.tool_config = types.GenerateContentConfig(tools=self.available_tools)
         self.chat_history = []
