@@ -1,5 +1,3 @@
-import datetime
-import pytz
 from kubernetes import client
 
 # --- Handlers pour le verbe 'GET' ---
@@ -16,21 +14,30 @@ def get_pods(v1, namespace=None, **kwargs):
     items = v1.list_pod_for_all_namespaces().items if not namespace else v1.list_namespaced_pod(namespace).items
     output = "Pods:\n"
     for item in items:
-        output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Statut: {item.status.phase}\n"
+        ready_containers = sum(1 for s in item.status.container_statuses if s.ready) if item.status.container_statuses else 0
+        total_containers = len(item.spec.containers)
+        restarts = sum(s.restart_count for s in item.status.container_statuses) if item.status.container_statuses else 0
+        output += (f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, "
+                   f"Prêts: {ready_containers}/{total_containers}, Statut: {item.status.phase}, "
+                   f"Redémarrages: {restarts}\n")
     return output if items else "Aucun pod trouvé."
 
 def get_deployments(apps_v1, namespace=None, **kwargs):
     items = apps_v1.list_deployment_for_all_namespaces().items if not namespace else apps_v1.list_namespaced_deployment(namespace).items
     output = "Déploiements:\n"
     for item in items:
-        output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Replicas: {item.status.replicas}\n"
+        ready_replicas = item.status.ready_replicas or 0
+        total_replicas = item.spec.replicas
+        output += (f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, "
+                   f"Prêts: {ready_replicas}/{total_replicas}\n")
     return output if items else "Aucun déploiement trouvé."
 
 def get_services(v1, namespace=None, **kwargs):
     items = v1.list_service_for_all_namespaces().items if not namespace else v1.list_namespaced_service(namespace).items
     output = "Services:\n"
     for item in items:
-        output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Type: {item.spec.type}, IP: {item.spec.cluster_ip}\n"
+        output += (f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, "
+                   f"Type: {item.spec.type}, IP: {item.spec.cluster_ip}\n")
     return output if items else "Aucun service trouvé."
 
 # --- Handlers pour le verbe 'DESCRIBE' ---
@@ -47,7 +54,6 @@ def describe_pod(v1, name, namespace, **kwargs):
     return output
 
 def describe_deployment(apps_v1, name, namespace, **kwargs):
-    """Récupère les détails d'un déploiement spécifique."""
     deployment = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
     spec = deployment.spec
     status = deployment.status
@@ -56,7 +62,6 @@ def describe_deployment(apps_v1, name, namespace, **kwargs):
     output += f"  - Replicas: {status.replicas or 0} désirés | {status.updated_replicas or 0} à jour | {status.ready_replicas or 0} prêts | {status.available_replicas or 0} disponibles\n"
     output += f"  - Stratégie: {spec.strategy.type}\n"
 
-    # On cherche l'annotation de redémarrage
     annotations = spec.template.metadata.annotations
     restarted_at = annotations.get('kubectl.kubernetes.io/restartedAt') if annotations else None
     if restarted_at:
@@ -68,9 +73,11 @@ def describe_deployment(apps_v1, name, namespace, **kwargs):
 
     return output
 
+# --- Handlers pour les verbes d'ACTION ---
+import datetime
+import pytz
 
 def restart_deployment(apps_v1, name, namespace, **kwargs):
-    """Redémarre un déploiement en mettant à jour ses annotations."""
     patch = {
         "spec": {
             "template": {
@@ -84,3 +91,25 @@ def restart_deployment(apps_v1, name, namespace, **kwargs):
     }
     apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=patch)
     return f"Le redémarrage du déploiement '{name}' dans le namespace '{namespace}' a été initié."
+
+# --- Handlers pour le verbe 'LOGS' ---
+
+def get_pod_logs(v1, name, namespace, **kwargs):
+    pod = v1.read_namespaced_pod(name=name, namespace=namespace)
+    if not pod.spec.containers:
+        return f"Erreur: Le pod '{name}' n'a pas de conteneurs."
+
+    container_name = pod.spec.containers[0].name
+
+    logs = v1.read_namespaced_pod_log(
+        name=name,
+        namespace=namespace,
+        container=container_name,
+        tail_lines=50
+    )
+
+    output = f"Logs pour le pod '{name}' (conteneur: {container_name}):\n"
+    output += "--------------------------------------------------\n"
+    output += logs
+    output += "\n--------------------------------------------------"
+    return output

@@ -15,6 +15,7 @@ DISPATCHER = {
     ('describe', 'pods'): handlers.describe_pod,
     ('describe', 'deployments'): handlers.describe_deployment,
     ('restart', 'deployments'): handlers.restart_deployment,
+    ('logs', 'pods'): handlers.get_pod_logs,
 }
 
 def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None) -> str:
