@@ -4,13 +4,58 @@ from kubernetes import client
 from kubernetes.client import ApiClient
 
 def get_deployments(apps_v1, namespace=None, **kwargs):
-    items = apps_v1.list_deployment_for_all_namespaces().items if not namespace else apps_v1.list_namespaced_deployment(namespace).items
+    """List deployments in a specific namespace or in all namespaces."""
+    if namespace:
+        items = apps_v1.list_namespaced_deployment(namespace).items
+    else:
+        items = apps_v1.list_deployment_for_all_namespaces().items
+
     output = "Déploiements:\n"
     for item in items:
         ready = item.status.ready_replicas or 0
         total = item.spec.replicas
         output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Prêts: {ready}/{total}\n"
+
     return output if items else "Aucun déploiement trouvé."
+
+def get_deployment_history(apps_v1, name, namespace, **kwargs):
+    """Get the rollout history of a deployment."""
+    try:
+        deployment = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+    except client.ApiException as e:
+        if e.status == 404:
+            return f"Error: Deployment '{name}' not found in namespace '{namespace}'."
+        raise
+
+    all_replicasets = apps_v1.list_namespaced_replica_set(namespace=namespace).items
+    owned_replicasets = []
+    for rs in all_replicasets:
+        if rs.metadata.owner_references:
+            for owner in rs.metadata.owner_references:
+                if owner.uid == deployment.metadata.uid:
+                    owned_replicasets.append(rs)
+                    break
+
+    if not owned_replicasets:
+        return f"No rollout history found for deployment '{name}'."
+
+    revisions = {}
+    for rs in owned_replicasets:
+        revision = rs.metadata.annotations.get('deployment.kubernetes.io/revision')
+        if revision:
+            # Corrected annotation key from kubernetes.io-change-cause to kubernetes.io/change-cause
+            change_cause = rs.metadata.annotations.get('kubernetes.io/change-cause', '<none>')
+            revisions[int(revision)] = change_cause
+
+    if not revisions:
+        return f"No rollout history found for deployment '{name}'."
+
+    output = f"Historique des déploiements pour '{name}':\n"
+    output += "REVISION  CHANGE-CAUSE\n"
+    for rev in sorted(revisions.keys()):
+        output += f"{rev:<9} {revisions[rev]}\n"
+
+    return output
 
 def describe_deployment(apps_v1, name, namespace, **kwargs):
     dep = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
