@@ -5,7 +5,6 @@ from kubernetes import client, config
 class K8sClientManager:
     _instance = None
 
-    # Déclaration des attributs avec leurs types
     v1: Optional[client.CoreV1Api]
     apps_v1: Optional[client.AppsV1Api]
     error: Optional[Exception]

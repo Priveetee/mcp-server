@@ -1,5 +1,3 @@
-# k8s/router.py
-
 HANDLER_REGISTRY = {}
 
 def register_handler(verb, resource):
@@ -11,11 +9,18 @@ def register_handler(verb, resource):
 
 def dispatch(verb, resource, **kwargs):
     """Finds and executes the appropriate handler from the registry."""
+    v1 = kwargs.pop('v1', None)
+    apps_v1 = kwargs.pop('apps_v1', None)
+
+    handler_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+
+    if v1:
+        handler_kwargs['v1'] = v1
+    if apps_v1:
+        handler_kwargs['apps_v1'] = apps_v1
+
     handler = HANDLER_REGISTRY.get((verb, resource))
     if handler:
-        return handler(**kwargs)
+        return handler(**handler_kwargs)
     else:
         return f"Erreur: Combinaison non supportée: {verb} {resource}."
-
-# NO LONGER NEEDED HERE - This was causing the circular dependency.
-# from .handlers import cluster_handler, deployment_handler, pod_handler

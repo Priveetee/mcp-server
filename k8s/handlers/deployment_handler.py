@@ -1,7 +1,6 @@
 import datetime
 import pytz
 from kubernetes import client
-from kubernetes.client import ApiClient
 from ..router import register_handler
 
 @register_handler('get', 'deployments')
