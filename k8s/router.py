@@ -1,3 +1,5 @@
+# k8s/router.py
+
 HANDLER_REGISTRY = {}
 
 def register_handler(verb, resource):
@@ -15,4 +17,5 @@ def dispatch(verb, resource, **kwargs):
     else:
         return f"Erreur: Combinaison non supportée: {verb} {resource}."
 
-from .handlers import cluster_handler, deployment_handler, pod_handler
+# NO LONGER NEEDED HERE - This was causing the circular dependency.
+# from .handlers import cluster_handler, deployment_handler, pod_handler

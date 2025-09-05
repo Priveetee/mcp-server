@@ -1,7 +1,13 @@
+# k8s/client.py
+
 from typing import Optional
 from kubernetes.client.rest import ApiException
+
+# Import handlers FIRST to run their decorators and populate the registry.
+from .handlers import cluster_handler, deployment_handler, pod_handler
+
 from .config import k8s_clients
-from . import router  # Import the new router
+from . import router  # Now, import the router with its registry populated.
 
 def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namespace: Optional[str] = None, replicas: Optional[int] = None) -> str:
     """
@@ -28,7 +34,6 @@ def kubernetes_tool(verb: str, resource: str, name: Optional[str] = None, namesp
         return f"Erreur de configuration Kubernetes: {k8s_clients.error}"
 
     try:
-        # Delegate the call to the router
         return router.dispatch(
             verb,
             resource,
