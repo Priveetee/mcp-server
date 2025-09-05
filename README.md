@@ -1,31 +1,32 @@
+### **`README.md` (Version Mise à Jour)**
+
 # MCP Server – Agent Conversationnel Kubernetes
 
 ## Description
 
-MCP Server est un assistant conversationnel pour Kubernetes (K3s/K8s). Il permet de discuter en langage naturel avec votre cluster pour :
-*   Consulter l'état des ressources (nœuds, pods, déploiements, services, namespaces).
-*   Effectuer des diagnostics (bilans de santé, descriptions détaillées, logs).
-*   Gérer des actions (mise à l'échelle, redémarrage, annulation de déploiements), avec demande de confirmation pour la sécurité.
+MCP Server est un assistant conversationnel pour Kubernetes (K3s/K8s), propulsé par le modèle Gemini 2.5 Pro. Il permet de discuter en langage naturel avec votre cluster pour :
+*   **Déployer** de nouvelles applications simplement.
+*   **Consulter** l'état des ressources (nœuds, pods, déploiements, namespaces).
+*   **Inspecter** en profondeur avec les descriptions, les logs et l'historique des déploiements.
+*   **Gérer** le cycle de vie des applications (mise à l'échelle, redémarrage, retour en arrière).
+*   **Diagnostiquer** l'état général du cluster.
 
-Il est propulsé par le modèle Gemini via le Google Gen AI SDK et la librairie Python officielle de Kubernetes.
+Toutes les actions modifiant le cluster sont sécurisées par une demande de confirmation.
 
 ## Prérequis
 
-*   **Python 3.10+** (recommandé pour la compatibilité)
-*   Un **cluster Kubernetes** (K3s/K8s) accessible depuis votre machine.
-*   Un fichier **kubeconfig** valide pour ce cluster.
-*   Une **clé API Gemini** (pour le Google Gen AI SDK).
+*   **Python 3.10+**
+*   Un **cluster Kubernetes** (K3s/K8s) accessible.
+*   Un fichier **kubeconfig** valide.
+*   Une **clé API Gemini**.
 
 ## Installation
-
-Suivez ces étapes dans votre terminal :
 
 1.  **Créez et activez un environnement virtuel :**
     ```bash
     python3 -m venv .venv
     source .venv/bin/activate
     ```
-    *(Si vous utilisez `fish` shell, remplacez `source .venv/bin/activate` par `source .venv/bin/activate.fish`.)*
 
 2.  **Installez les dépendances :**
     ```bash
@@ -34,48 +35,78 @@ Suivez ces étapes dans votre terminal :
     ```
 
 3.  **Configurez votre kubeconfig :**
-    Copiez votre fichier kubeconfig (par exemple `~/.kube/config` ou celui de K3s sur votre VM) dans le répertoire `mcp-server` et renommez-le `k3s.yaml`.
+    Copiez votre fichier `kubeconfig` dans le répertoire du projet et renommez-le `k3s.yaml`.
     ```bash
-    # Exemple si votre kubeconfig est à ~/.kube/config
+    # Exemple
     cp ~/.kube/config ./k3s.yaml
     ```
-    *(Alternativement, vous pouvez définir la variable d'environnement `KUBECONFIG` vers le chemin de votre fichier : `export KUBECONFIG=/chemin/vers/votre/fichier.yaml`.)*
+    *(Alternativement, définissez la variable d'environnement `KUBECONFIG`.)*
 
 4.  **Définissez votre clé API Gemini :**
     ```bash
     export GOOGLE_API_KEY="VOTRE_CLE_API_GEMINI"
     ```
-    *(Remplacez `"VOTRE_CLE_API_GEMINI"` par votre vraie clé API. Pour une persistance entre les sessions, ajoutez cette ligne à votre `.bashrc`, `.zshrc` ou `.config/fish/config.fish`.)*
+    *(Pour une persistance, ajoutez cette ligne à votre `.bashrc` ou `.zshrc`.)*
 
 ## Lancement
 
-Une fois l'installation et la configuration terminées, démarrez l'agent :
-
+Une fois la configuration terminée, démarrez l'agent :
 ```bash
 python3 mcp_core.py
 ```
 
-## Utilisation
+## Commandes et Exemples
 
-L'agent MCP est maintenant interactif. Tapez vos commandes en langage naturel.
+Voici une liste complète des actions que vous pouvez demander au MCP.
 
-### Exemples :
+### Déploiement d'Applications
 
-*   **Observer l'état :**
-    *   `liste les namespaces`
-    *   `quels sont les nœuds ?`
-    *   `liste les pods dans kube-system`
-    *   `décris le déploiement traefik dans kube-system`
-    *   `montre les logs du pod coredns-xyz dans kube-system` (remplacez le nom du pod)
-    *   `fais un bilan de santé du cluster`
+Le MCP peut déployer une nouvelle application en utilisant une image de conteneur.
 
-*   **Agir (demande de confirmation) :**
-    *   `scale le déploiement coredns à 2 réplicas dans kube-system`
-    *   `redémarre le déploiement traefik dans kube-system`
-    *   `annule le déploiement coredns dans kube-system` (fonctionne si l'historique de révision est suffisant)
+*   **Déployer une nouvelle application :**
+    > `déploie une application nginx nommée 'webapp' avec 2 réplicas`
 
-*   **Aide et sortie :**
-    *   `help`
-    *   `exit`
+### Consultation et Inspection (Actions non-modifiantes)
 
----
+*   **Lister les ressources (dans tous les namespaces) :**
+    > `liste les pods`
+    > `montre-moi tous les déploiements`
+
+*   **Lister les ressources (dans un namespace spécifique) :**
+    > `liste les pods dans kube-system`
+
+*   **Lister les ressources du cluster :**
+    > `quels sont les nœuds ?`
+    > `liste les namespaces`
+
+*   **Obtenir des détails sur une ressource :**
+    > `décris le déploiement traefik dans kube-system`
+    > `donne-moi les détails du pod coredns-xyz`
+
+*   **Consulter les logs d'un pod :**
+    > `montre les logs du pod coredns-xyz dans kube-system`
+
+*   **Consulter l'historique d'un déploiement :**
+    > `quel est l'historique du déploiement coredns ?`
+
+*   **Effectuer un bilan de santé :**
+    > `fais un bilan de santé du cluster`
+
+### Gestion des Applications (Actions modifiantes, avec confirmation)
+
+*   **Mettre à l'échelle un déploiement :**
+    > `scale le déploiement coredns à 3 réplicas dans kube-system`
+
+*   **Redémarrer un déploiement :**
+    > `redémarre le déploiement traefik`
+
+*   **Annuler le dernier changement d'un déploiement :**
+    > `annule le déploiement coredns dans kube-system`
+
+### Aide et Sortie
+
+*   **Afficher l'aide :**
+    > `help`
+
+*   **Quitter le programme :**
+    > `exit`
