@@ -2,7 +2,9 @@ import datetime
 import pytz
 from kubernetes import client
 from kubernetes.client import ApiClient
+from ..router import register_handler
 
+@register_handler('get', 'deployments')
 def get_deployments(apps_v1, namespace=None, **kwargs):
     """List deployments in a specific namespace or in all namespaces."""
     if namespace:
@@ -18,6 +20,7 @@ def get_deployments(apps_v1, namespace=None, **kwargs):
 
     return output if items else "Aucun déploiement trouvé."
 
+@register_handler('history', 'deployments')
 def get_deployment_history(apps_v1, name, namespace, **kwargs):
     """Get the rollout history of a deployment."""
     try:
@@ -43,7 +46,6 @@ def get_deployment_history(apps_v1, name, namespace, **kwargs):
     for rs in owned_replicasets:
         revision = rs.metadata.annotations.get('deployment.kubernetes.io/revision')
         if revision:
-            # Corrected annotation key from kubernetes.io-change-cause to kubernetes.io/change-cause
             change_cause = rs.metadata.annotations.get('kubernetes.io/change-cause', '<none>')
             revisions[int(revision)] = change_cause
 
@@ -57,6 +59,7 @@ def get_deployment_history(apps_v1, name, namespace, **kwargs):
 
     return output
 
+@register_handler('describe', 'deployments')
 def describe_deployment(apps_v1, name, namespace, **kwargs):
     dep = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
     output = f"Détails du Déploiement '{name}' (NS: {namespace}):\n"
@@ -66,12 +69,14 @@ def describe_deployment(apps_v1, name, namespace, **kwargs):
         output += f"  - Redémarré le: {restarted_at}\n"
     return output
 
+@register_handler('restart', 'deployments')
 def restart_deployment(apps_v1, name, namespace, **kwargs):
     restarted_at = datetime.datetime.utcnow().replace(tzinfo=pytz.UTC).isoformat()
     body = {"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": restarted_at}}}}}
     apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
     return f"Le redémarrage du déploiement '{name}' a été initié."
 
+@register_handler('scale', 'deployments')
 def scale_deployment(apps_v1, name, namespace, replicas, **kwargs):
     replica_count = int(replicas)
     scale_body = client.V1Scale(
@@ -81,7 +86,7 @@ def scale_deployment(apps_v1, name, namespace, replicas, **kwargs):
     apps_v1.patch_namespaced_deployment_scale(name=name, namespace=namespace, body=scale_body)
     return f"Le déploiement '{name}' a été mis à l'échelle à {replica_count} réplicas."
 
-
+@register_handler('undo', 'deployments')
 def undo_deployment_rollout(apps_v1, name, namespace, **kwargs):
     """Annule le dernier déploiement (rollout) pour revenir à la version précédente."""
     all_replicasets = apps_v1.list_namespaced_replica_set(namespace=namespace).items

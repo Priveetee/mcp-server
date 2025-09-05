@@ -1,3 +1,6 @@
+from ..router import register_handler
+
+@register_handler('get', 'pods')
 def get_pods(v1, namespace=None, **kwargs):
     items = v1.list_pod_for_all_namespaces().items if not namespace else v1.list_namespaced_pod(namespace).items
     output = "Pods:\n"
@@ -8,6 +11,7 @@ def get_pods(v1, namespace=None, **kwargs):
         output += f"- NS: {item.metadata.namespace}, Nom: {item.metadata.name}, Prêts: {ready}/{total}, Statut: {item.status.phase}, Redémarrages: {restarts}\n"
     return output if items else "Aucun pod trouvé."
 
+@register_handler('describe', 'pods')
 def describe_pod(v1, name, namespace, **kwargs):
     pod = v1.read_namespaced_pod(name=name, namespace=namespace)
     output = f"Détails du Pod '{name}' (NS: {namespace}):\n"
@@ -17,6 +21,7 @@ def describe_pod(v1, name, namespace, **kwargs):
         output += f"    - {c.name} (Image: {c.image})\n"
     return output
 
+@register_handler('logs', 'pods')
 def get_pod_logs(v1, name, namespace, **kwargs):
     container_name = v1.read_namespaced_pod(name=name, namespace=namespace).spec.containers[0].name
     logs = v1.read_namespaced_pod_log(name=name, namespace=namespace, container=container_name, tail_lines=50)

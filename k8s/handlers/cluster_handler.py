@@ -1,3 +1,6 @@
+from ..router import register_handler
+
+@register_handler('get', 'nodes')
 def get_nodes(v1, **kwargs):
     items = v1.list_node().items
     output = "Nœuds:\n"
@@ -6,7 +9,7 @@ def get_nodes(v1, **kwargs):
         output += f"- {item.metadata.name} (Statut: {'Prêt' if status == 'True' else 'Non Prêt'})\n"
     return output
 
-
+@register_handler('get', 'namespaces')
 def get_namespaces(v1, **kwargs):
     """Liste tous les namespaces disponibles dans le cluster. Ne prend aucun argument."""
     items = v1.list_namespace().items
@@ -15,7 +18,7 @@ def get_namespaces(v1, **kwargs):
         output += f"- {item.metadata.name} (Statut: {item.status.phase})\n"
     return output
 
-
+@register_handler('check', 'health')
 def check_cluster_health(v1, apps_v1, **kwargs):
     """Effectue un bilan de santé du cluster en recherchant les problèmes courants."""
     problems = []
