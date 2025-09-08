@@ -1,5 +1,3 @@
-### **`README.md` (Version Mise à Jour)**
-
 # MCP Server – Agent Conversationnel Kubernetes
 
 ## Description
